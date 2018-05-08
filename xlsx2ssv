@@ -1,0 +1,181 @@
+#!/bin/bash
+
+tmp="/var/tmp/$$"
+
+# xlsx2ssvの前に saveLOG=1 とつけた時だけログ保存
+if [ "$saveLOG" = 1 ]; then 
+  exec 2>log_xlsx2ssv; set -xv
+fi
+
+# BSD Grepユーザー向けにaliasを設定
+shopt -s expand_aliases
+
+# macだとgnugrepをbrewでインストールする時、ggrepとしてインストールされるのでエイリアスをつける
+if type ggrep >/dev/null 2>/dev/null; then
+    alias grep='ggrep'
+else
+    :
+fi
+
+function remove_tmp(){
+    rm -f ${tmp}-*
+}
+
+function normal_exit {
+  remove_tmp
+  exit 0
+}
+
+function error_exit {
+    echo "$1"
+    [ -e ${tmp}-xlsx2csv_err ] && cat ${tmp}-xlsx2csv_err
+
+    remove_tmp "error"
+    exit 1
+}
+
+function checkPipestatus () {
+    echo "${PIPESTATUS[@]}" > ${tmp}-pipestatus
+    local sum=0
+
+    for  i in $(cat $tmp-pipestatus)
+    do
+        sum=$((sum+=i))
+    done
+
+    if [ $sum -eq 0 ]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+function ERROR_CHECK_PIPE(){
+    if checkPipestatus; then
+        :
+    else
+        local message="$1"
+        error_exit "$message" # エラーなのでExit処理に
+    fi
+}
+
+############# セル範囲を数字に変換 ##################
+# アルファベットと数字に分割、アルファベットは列、数字は行
+# アルファベットはAからZZまで対応させて3文字はNGとする
+# A -> 1 Z ->26 とし、26進数とする
+# AAは 26+1で27列目であるし、DCは26*4+3で107列目である
+function convertRC() {
+    echo $1 | tr '[a-z]' '[A-Z]' > $tmp-cell                       # アルファベットを大文字に統一する
+
+    # アルファベットと数字に分割
+    local alpha="$(cat $tmp-cell | grep -oP '^[A-Z]+')"                  # アルファベット抜き出し
+    local number="$(cat $tmp-cell | grep  -oP '(?<=[A-Z]){1,2}[0-9]+')"  # 数字抜き出し
+
+    ### バリデーション
+    [ ! -z "$alpha" ] || error_exit "アルファベットマッチ回数異常"
+    [ ! -z "$number" ] || error_exit "数字マッチ回数異常"
+
+    # 正常: アルファベット1-2文字ある、1回しかマッチしていない
+    # 正常: 数字が1回しかマッチしていない
+    if [ "${#alpha}" = 1 ] || [ "${#alpha}" = 2  ]; then 
+       :
+    else
+       error_exit "アルファベット文字数異常"
+    fi
+
+
+    # B3Bを弾けるようになるには専用の正規表現でマッチ回数を数える
+    if [ "$(cat ${tmp}-cell | grep -oP '[A-Z]+' | grep -c '' )" = 1 ]; then
+       :
+    else
+       error_exit "アルファベットマッチ回数異常"
+    fi
+
+    if [ $(echo "$number" | grep -c '') = 1 ]; then
+      :
+    else
+       error_exit "数字マッチ回数異常"
+    fi
+
+    # アルファベットが1文字か2文字か判断して変数に格納
+    # 1文字だけのときはalpha2を'@'とする、@はASCIIコードのAの1つ前であるので26進数計算で楽になる
+    if [ "${#alpha}" = 1 ]; then
+        local alpha1=$alpha
+        local alpha2='@'
+    elif [ "${#alpha}" = 2 ]; then
+        local alpha1="${alpha:1:1}"
+        local alpha2="${alpha:0:1}"
+    else
+        error_exit "アルファベット文字数異常"
+    fi
+
+    local alpha1_ascii=$(printf "%d\n" \'${alpha1})   # アルファベットをASCIIコード変換 
+    local alpha1_num=$((alpha1_ascii - 64))                 # ASCII-0x40 で数字に変換
+
+    local alpha2_ascii=$(printf "%d\n" \'${alpha2})
+    local alpha2_num=$((alpha2_ascii - 64))
+
+    local row=$number #行はそのまま出す
+    local column=$((alpha2_num * 26 + alpha1_num ))  # 列を算出
+
+    # 行列バリデーション
+    [ ! -z "$row" ] || error_exit "行算出異常"
+    [ "$row" -ge 1 ] || error_exit "行算出異常"
+    [ ! -z "$column" ] || error_exit "列算出異常"
+    [ "$column" -ge 1 ] || error_exit "列算出異常"
+
+    # 値をファイルで返す
+    echo "$row" >  $tmp-row
+    echo "$column" > $tmp-column
+}
+
+############# 引数処理 ##################
+if [ $# -ne 4 ]; then
+    echo "必要な引数は4つです"
+    echo "e.g. xlsx2ssv 1 A1 AC13 file.xlsx > output"
+    error_exit
+fi
+
+sheet_id=$1
+startcell=$2
+endcell=$3
+xlsxfile=$4
+
+############# 引数バリデーション ##################
+[ "$sheet_id" -ne 99  ] || error_exit "シート数が不正です"
+[ -e $xlsxfile ] || error_exit "存在しないxlsxファイルです"
+
+############# セル位置(RC形式)を行列に変換する ######
+convertRC $startcell
+startrow="$(cat $tmp-row)"
+startcol="$(cat $tmp-column)"
+
+convertRC $endcell
+endrow="$(cat $tmp-row)"
+endcol="$(cat $tmp-column)"
+
+# STARTセル>ENDセルのときはNGとする
+[ "$startrow" -le "$endrow" ] || error_exit "セル範囲異常"
+[ "$startcol" -le "$endcol" ] || error_exit "セル範囲異常"
+
+############# xlsx -> csv ##################
+xlsx2csv -e -s "$sheet_id" "$xlsxfile" 2>${tmp}-xlsx2csv_err | 
+sed  -e 's/ /　/g'   \
+     -e 's/,,/,@,/g' \
+     -e 's/,,/,@,/g' \
+     -e 's/^,/@,/'   \
+     -e 's/,$/,@/g'  |
+sed 's/,/ /g' |
+sed -e '/^[@ ]*$/d'   > ${tmp}-ssv_all 
+ERROR_CHECK_PIPE "xlsx2csvエラー"
+
+############ 指定した範囲の行抽出 ############
+############ 指定した範囲の列抽出 ############
+cat ${tmp}-ssv_all | 
+sed -n ${startrow},${endrow}p |
+cut  -d " " -f ${startcol}-${endcol} > ${tmp}-ssv
+
+cat ${tmp}-ssv
+
+normal_exit
+exit 0
