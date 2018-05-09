@@ -2,6 +2,11 @@
 
 tmp="/var/tmp/$$"
 
+#標準入力を格納(パイプと<入力両対応)
+if [ -s /dev/stdin ] ; then
+    cat  > $tmp-stdin_file 
+fi
+
 # xlsx2ssvの前に saveLOG=1 とつけた時だけログ保存
 if [ "$saveLOG" = 1 ]; then 
   exec 2>log_xlsx2ssv; set -xv
@@ -130,16 +135,25 @@ function convertRC() {
 }
 
 ############# 引数処理 ##################
-if [ $# -ne 4 ]; then
-    echo "必要な引数は4つです"
-    echo "e.g. xlsx2ssv 1 A1 AC13 file.xlsx > output"
-    error_exit
-fi
 
 sheet_id=$1
 startcell=$2
 endcell=$3
-xlsxfile=$4
+
+# 標準入力があるときは変数を変える
+if [ -s ${tmp}-stdin_file ]; then
+    xlsxfile=$tmp-stdin_file
+    readonly need_arg=3
+else
+    xlsxfile=$4
+    readonly need_arg=4
+fi
+
+if [ $# -ne ${need_arg} ]; then
+    echo "必要な引数は4つです"
+    echo "e.g. xlsx2ssv 1 A1 AC13 file.xlsx > output"
+    error_exit
+fi
 
 ############# 引数バリデーション ##################
 [ "$sheet_id" -ne 99  ] || error_exit "シート数が不正です"

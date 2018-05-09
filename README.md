@@ -15,6 +15,7 @@
 # Usage
 
 `$ xlsx2ssv sheetNo cellrange-start cellrange-end xlsxfile > stdout`
+`$ xlsx2ssv sheetNo cellrange-start cellrange-end < xlsxfile > stdout`
 
 # Example
 

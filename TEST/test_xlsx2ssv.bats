@@ -1,8 +1,6 @@
 #!/usr/bin/env bats 
 
-# xlsx2ssvフォルダ直下で実行されていることを想定
 # TEST_Requirement [Open-usp-Tukubai](https://github.com/usp-engineers-community/Open-usp-Tukubai)
-
 
 setup() {
   cd $BATS_TEST_DIRNAME
@@ -42,6 +40,25 @@ setup() {
     [ "$(retu output)" = "3" ]
 }
 
+@test "1シート目のA1からC3まで取得(セル小文字表記: 標準入力版)" {
+    run  xlsx2ssv 1 a1 c3 < valid.xlsx
+
+    [ "$status" -eq 0 ]
+    echo "$output" > output
+    [ "$(gyo output)" = "3" ]
+    [ "$(retu output)" = "3" ]
+}
+
+
+@test "2シート目のB2からD10まで取得(標準入力版)" {
+     run xlsx2ssv 2 b2 D10 < valid.xlsx 
+
+    [ "$status" -eq 0 ]
+    echo "$output" > output
+    [ "$(gyo output)" = "9" ]
+    [ "$(retu output)" = "3" ]
+}
+
 @test "1シート目のD2からGの有効行まで取得" {
     skip
      run xlsx2ssv 2 D2 G- valid2.xlsx
@@ -70,6 +87,11 @@ setup() {
     [ "${lines[0]}" = "必要な引数は4つです" ]
     [ "${lines[1]}" = "e.g. xlsx2ssv 1 A1 AC13 file.xlsx > output" ]
 
+}
+
+@test "引数が足りない(標準入力があるときは3つでもOK)" {
+    run xlsx2ssv  1 a1 c3 < valid.xlsx 
+    [ "$status" -eq 0 ]
 }
 
 @test "存在しないシートを選択" {
