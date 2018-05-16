@@ -32,7 +32,7 @@ setup() {
 }
 
 @test "2シート目のB2からD10まで取得" {
-     run xlsx2ssv 2 b2 D10 valid.xlsx 
+     run xlsx2ssv 2 b2 D10 valid.xlsx
 
     [ "$status" -eq 0 ]
     echo "$output" > output
@@ -41,23 +41,42 @@ setup() {
 }
 
 @test "1シート目のA1からC3まで取得(セル小文字表記: 標準入力版)" {
-    run  xlsx2ssv 1 a1 c3 < valid.xlsx
-
-    [ "$status" -eq 0 ]
-    echo "$output" > output
-    [ "$(gyo output)" = "3" ]
-    [ "$(retu output)" = "3" ]
+     run  xlsx2ssv 1 a1 c3 < valid.xlsx
+  
+     [ "$status" -eq 0 ]
+     echo "$output" > output
+     [ "$(gyo output)" = "3" ]
+     [ "$(retu output)" = "3" ]
 }
 
 
 @test "2シート目のB2からD10まで取得(標準入力版)" {
-     run xlsx2ssv 2 b2 D10 < valid.xlsx 
+      run xlsx2ssv 2 b2 D10 < valid.xlsx
+  
+     [ "$status" -eq 0 ]
+     echo "$output" > output
+     [ "$(gyo output)" = "9" ]
+     [ "$(retu output)" = "3" ]
+} 
 
-    [ "$status" -eq 0 ]
-    echo "$output" > output
-    [ "$(gyo output)" = "9" ]
-    [ "$(retu output)" = "3" ]
-}
+@test "1シート目のA1からC3まで取得(パイプによる標準入力版)" {
+     run bash -c 'cat valid.xlsx | xlsx2ssv 1 a1 c3'
+  
+     [ "$status" -eq 0 ]
+     echo "$output" > output
+     [ "$(gyo output)" = "3" ]
+     [ "$(retu output)" = "3" ]
+} 
+  
+  
+@test "2シート目のB2からD10まで取得(パイプによる標準入力版)" {
+      run bash -c 'cat valid.xlsx | xlsx2ssv 2 b2 D10'
+  
+     [ "$status" -eq 0 ]
+     echo "$output" > output
+     [ "$(gyo output)" = "9" ]
+     [ "$(retu output)" = "3" ]
+} 
 
 @test "1シート目のD2からGの有効行まで取得" {
     skip

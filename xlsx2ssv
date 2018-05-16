@@ -5,6 +5,8 @@ tmp="/var/tmp/$$"
 #標準入力を格納(パイプと<入力両対応)
 if [ -s /dev/stdin ] ; then
     cat  > $tmp-stdin_file 
+elif [ -p /dev/stdin ]; then
+    cat - > $tmp-stdin_file
 fi
 
 # xlsx2ssvの前に saveLOG=1 とつけた時だけログ保存
